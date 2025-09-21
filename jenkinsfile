@@ -4,7 +4,7 @@ pipeline {
     environment {
         TOMCAT_SERVER = '10.0.11.178'           // Tomcat server private IP
         PROXY_SERVER  = '10.0.40.132'           // Proxy server IP
-        SSH_CRED_ID   = 'ec2-user'              // Jenkins SSH credentials ID
+        SSH_CRED_ID   = 'Devops_MJ_cred'              // Jenkins SSH credentials ID
         TOMCAT_PATH   = '/opt/tomcat/webapps'   // Tomcat webapps directory
         TOMCAT_SVC    = 'tomcat10'              // Tomcat service name
     }
