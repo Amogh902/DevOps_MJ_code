@@ -2,16 +2,18 @@ pipeline {
     agent any
 
     environment {
-        TOMCAT_SERVER = '10.0.11.178'           // Tomcat server private IP
-        SSH_CRED_ID   = 'Devops_MJ_cred'        // Jenkins SSH credentials ID
-        TOMCAT_PATH   = '/opt/tomcat/webapps'   // Tomcat webapps directory
-        TOMCAT_SVC    = 'tomcat10'              // Tomcat service name
+        WAR_FILE = "target/student.war"
+        REMOTE_USER = "ec2-user"
+        REMOTE_HOST = "10.0.11.178"
+        TOMCAT_PATH = "/opt/tomcat/webapps"
+        SSH_CREDENTIALS = "Credentials_for_ssh_app_server"
+        APP_URL = "http://${REMOTE_HOST}:8080/"
     }
 
     stages {
-        stage('Checkout') {
+        stage('Checkout SCM') {
             steps {
-                git branch: 'main', url: 'https://github.com/Amogh902/DevOps_MJ_code.git'
+                checkout scm
             }
         }
 
@@ -23,62 +25,53 @@ pipeline {
 
         stage('Deploy to Tomcat') {
             steps {
-                sshagent([SSH_CRED_ID]) {
+                sshagent([env.SSH_CREDENTIALS]) {
                     sh """
-                        WAR_FILE=\$(ls target/*.war | head -n1)
-                        echo "WAR built: \$WAR_FILE"
-
-                        # Copy WAR to Tomcat server
-                        scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${TOMCAT_SERVER}:/tmp/ROOT.war
-
-                        # Deploy WAR on Tomcat
-                        ssh -o StrictHostKeyChecking=no ec2-user@${TOMCAT_SERVER} '
-                            sudo systemctl stop ${TOMCAT_SVC} || true
+                        scp -o StrictHostKeyChecking=no ${WAR_FILE} ${REMOTE_USER}@${REMOTE_HOST}:/tmp/ROOT.war
+                        ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} '
+                            sudo systemctl stop tomcat10 || true
                             sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war
                             sudo mv /tmp/ROOT.war ${TOMCAT_PATH}/ROOT.war
                             sudo chown tomcat:tomcat ${TOMCAT_PATH}/ROOT.war
                             sudo chmod 644 ${TOMCAT_PATH}/ROOT.war
-                            sudo systemctl start ${TOMCAT_SVC}
-
-                            # Wait until ROOT directory exists (deployment finished)
-                            TIMEOUT=120
-                            while [ ! -d "${TOMCAT_PATH}/ROOT" ] && [ \$TIMEOUT -gt 0 ]; do
-                                sleep 5
-                                TIMEOUT=\$((TIMEOUT-5))
-                            done
-
-                            if [ ! -d "${TOMCAT_PATH}/ROOT" ]; then
-                                echo "ERROR: ROOT app did not unpack correctly!"
-                                exit 1
-                            fi
-
-                            echo "Deployment finished successfully."
+                            sudo systemctl start tomcat10
                         '
                     """
                 }
             }
         }
 
-        stage('Verify via Proxy') {
+        stage('Verify Deployment') {
             steps {
-                sh """
-                    HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://${TOMCAT_SERVER}/)
-                    echo "HTTP code from Tomcat: \$HTTP_CODE"
-                    if [ "\$HTTP_CODE" -ne 200 ]; then
-                        echo "ERROR: App not reachable!"
-                        exit 1
-                    fi
-                """
+                script {
+                    def timeout = 120
+                    def deployed = false
+
+                    while (timeout > 0) {
+                        def status = sh(script: "curl -s -o /dev/null -w '%{http_code}' ${APP_URL}", returnStdout: true).trim()
+                        if (status == '200') {
+                            deployed = true
+                            echo "Deployment successful!"
+                            break
+                        }
+                        sleep 5
+                        timeout -= 5
+                    }
+
+                    if (!deployed) {
+                        error "Deployment verification failed or timed out!"
+                    }
+                }
             }
         }
     }
 
     post {
         success {
-            echo "✅ Deployment successful! Access the app via: http://${TOMCAT_SERVER}/"
+            echo "✅ Pipeline completed successfully."
         }
         failure {
-            echo "❌ Deployment failed. Check Jenkins console logs."
+            echo "❌ Deployment failed. Check Jenkins logs."
         }
     }
 }
