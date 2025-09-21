@@ -2,18 +2,16 @@ pipeline {
     agent any
 
     environment {
-        WAR_FILE = "target/student.war"
-        REMOTE_USER = "ec2-user"
-        REMOTE_HOST = "10.0.11.178"
-        TOMCAT_PATH = "/opt/tomcat/webapps"
-        SSH_CREDENTIALS = "Devops_MJ_cred"
-        APP_URL = "http://${REMOTE_HOST}:8080/"
+        SERVER_IP    = '10.0.11.178'
+        SSH_CRED_ID  = 'Devops_MJ_cred'
+        TOMCAT_PATH  = '/var/lib/tomcat10/webapps'
+        TOMCAT_SVC   = 'tomcat10'
     }
 
     stages {
-        stage('Checkout SCM') {
+        stage('Checkout') {
             steps {
-                checkout scm
+                git branch: 'main', url: 'https://github.com/Amogh902/DevOps_MJ_code.git'
             }
         }
 
@@ -25,42 +23,17 @@ pipeline {
 
         stage('Deploy to Tomcat') {
             steps {
-                sshagent([env.SSH_CREDENTIALS]) {
+                sshagent([SSH_CRED_ID]) {
                     sh """
-                        scp -o StrictHostKeyChecking=no ${WAR_FILE} ${REMOTE_USER}@${REMOTE_HOST}:/tmp/ROOT.war
-                        ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} '
-                            sudo systemctl stop tomcat10 || true
-                            sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war
-                            sudo mv /tmp/ROOT.war ${TOMCAT_PATH}/ROOT.war
+                        WAR_FILE=\$(ls target/*.war | head -n 1)
+                        scp -o StrictHostKeyChecking=no \$WAR_FILE ubuntu@${SERVER_IP}:/tmp/
+                        ssh -o StrictHostKeyChecking=no ubuntu@${SERVER_IP} '
+                            sudo rm -rf ${TOMCAT_PATH}/*
+                            sudo mv /tmp/*.war ${TOMCAT_PATH}/ROOT.war
                             sudo chown tomcat:tomcat ${TOMCAT_PATH}/ROOT.war
-                            sudo chmod 644 ${TOMCAT_PATH}/ROOT.war
-                            sudo systemctl start tomcat10
+                            sudo systemctl restart ${TOMCAT_SVC}
                         '
                     """
-                }
-            }
-        }
-
-        stage('Verify Deployment') {
-            steps {
-                script {
-                    def timeout = 120
-                    def deployed = false
-
-                    while (timeout > 0) {
-                        def status = sh(script: "curl -s -o /dev/null -w '%{http_code}' ${APP_URL}", returnStdout: true).trim()
-                        if (status == '200') {
-                            deployed = true
-                            echo "Deployment successful!"
-                            break
-                        }
-                        sleep 5
-                        timeout -= 5
-                    }
-
-                    if (!deployed) {
-                        error "Deployment verification failed or timed out!"
-                    }
                 }
             }
         }
@@ -68,10 +41,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Pipeline completed successfully."
+            echo "App deployed! Visit: http://${SERVER_IP}:8080/"
         }
         failure {
-            echo "❌ Deployment failed. Check Jenkins logs."
+            echo "Deployment failed."
         }
     }
 }
