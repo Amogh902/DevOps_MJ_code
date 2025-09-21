@@ -2,26 +2,24 @@ pipeline {
     agent any
 
     environment {
-        SSH_CRED_ID   = 'Devops_MJ_cred'
-        TOMCAT_PATH   = '/opt/tomcat/webapps'
-        TOMCAT_SVC    = 'tomcat10'
-        GIT_REPO      = 'https://github.com/Amogh902/DevOps_MJ_code.git'
-        GIT_BRANCH    = 'main'
-        APP_SERVER_IP = '10.0.11.178'   
-        PROXY_SERVER_IP = '10.0.40.132' 
+        SSH_CRED_ID     = 'Devops_MJ_cred'
+        TOMCAT_PATH     = '/opt/tomcat/webapps'
+        TOMCAT_SVC      = 'tomcat10'
+        GIT_REPO        = 'https://github.com/Amogh902/DevOps_MJ_code.git'
+        GIT_BRANCH      = 'main'
+        APP_SERVER_IP   = '10.0.11.178'   // App server private IP
+        PROXY_SERVER_IP = '10.0.40.132'   // Proxy public IP
     }
 
     stages {
         stage('Checkout') {
             steps {
-                echo "Cloning Git repository..."
                 git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
             }
         }
 
         stage('Build WAR') {
             steps {
-                echo "Building WAR with Maven..."
                 sh 'mvn clean package'
             }
         }
@@ -30,14 +28,14 @@ pipeline {
             steps {
                 sshagent([SSH_CRED_ID]) {
                     sh """
-                        # Get the WAR file
+                        # Find WAR file
                         WAR_FILE=\$(ls target/*.war | head -n1)
                         echo "WAR built: \$WAR_FILE"
 
-                        # Copy WAR to app-server as ROOT.war
+                        # Copy WAR to app server as ROOT.war
                         scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${APP_SERVER_IP}:/tmp/ROOT.war
 
-                        # Deploy on app-server
+                        # Deploy on app server
                         ssh -o StrictHostKeyChecking=no ec2-user@${APP_SERVER_IP} '
                             set -e
                             echo "Stopping Tomcat..."
@@ -50,9 +48,23 @@ pipeline {
                             echo "Deploying new ROOT.war..."
                             sudo mv /tmp/ROOT.war ${TOMCAT_PATH}/ROOT.war
                             sudo chown -R tomcat:tomcat ${TOMCAT_PATH}
+                            sudo chmod -R 755 ${TOMCAT_PATH}
 
                             echo "Starting Tomcat..."
                             sudo systemctl start ${TOMCAT_SVC}
+
+                            # Wait for Tomcat to unpack ROOT.war
+                            echo "Waiting for ROOT app to deploy..."
+                            TIMEOUT=30
+                            while [ ! -d "${TOMCAT_PATH}/ROOT" ] && [ \$TIMEOUT -gt 0 ]; do
+                                sleep 2
+                                TIMEOUT=\$((TIMEOUT-2))
+                            done
+
+                            if [ ! -d "${TOMCAT_PATH}/ROOT" ]; then
+                                echo "ERROR: ROOT app did not unpack correctly!"
+                                exit 1
+                            fi
 
                             echo "Deployment finished."
                         '
@@ -68,7 +80,7 @@ pipeline {
                     HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://${PROXY_SERVER_IP}/)
                     echo "HTTP status code from proxy: \$HTTP_CODE"
                     if [ "\$HTTP_CODE" -ne 200 ]; then
-                        echo "ERROR: App not reachable!"
+                        echo "ERROR: App not reachable via proxy!"
                         exit 1
                     fi
                 """
