@@ -26,8 +26,8 @@ pipeline {
                 sshagent([SSH_CRED_ID]) {
                     sh """
                         WAR_FILE=\$(ls target/*.war | head -n 1)
-                        scp -o StrictHostKeyChecking=no \$WAR_FILE ubuntu@${SERVER_IP}:/tmp/
-                        ssh -o StrictHostKeyChecking=no ubuntu@${SERVER_IP} '
+                        scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${SERVER_IP}:/tmp/
+                        ssh -o StrictHostKeyChecking=no ec2-user@${SERVER_IP} '
                             sudo rm -rf ${TOMCAT_PATH}/*
                             sudo mv /tmp/*.war ${TOMCAT_PATH}/ROOT.war
                             sudo chown tomcat:tomcat ${TOMCAT_PATH}/ROOT.war
