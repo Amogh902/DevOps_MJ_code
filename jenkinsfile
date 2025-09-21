@@ -7,6 +7,7 @@ pipeline {
         SSH_CRED_ID   = 'Devops_MJ_cred'
         TOMCAT_PATH   = '/opt/tomcat/webapps'
         TOMCAT_SVC    = 'tomcat10'
+        DEPLOY_TIMEOUT = 120  // in seconds
     }
 
     stages {
@@ -29,28 +30,33 @@ pipeline {
                         WAR_FILE=\$(ls target/*.war | head -n1)
                         echo "WAR built: \$WAR_FILE"
 
+                        # Copy WAR to Tomcat server
                         scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${TOMCAT_SERVER}:/tmp/ROOT.war
 
-                        ssh -o StrictHostKeyChecking=no ec2-user@${TOMCAT_SERVER} << 'EOF'
+                        # Deploy WAR on Tomcat
+                        ssh -o StrictHostKeyChecking=no ec2-user@${TOMCAT_SERVER} '
                             sudo systemctl stop ${TOMCAT_SVC} || true
                             sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war
                             sudo mv /tmp/ROOT.war ${TOMCAT_PATH}/ROOT.war
-                            sudo chown -R tomcat:tomcat ${TOMCAT_PATH}
-                            sudo chmod -R 755 ${TOMCAT_PATH}
-                            sudo systemctl start ${TOMCAT_SVC}
+                            sudo chown tomcat:tomcat ${TOMCAT_PATH}/ROOT.war
+                            sudo chmod 644 ${TOMCAT_PATH}/ROOT.war
+                            sudo systemctl restart ${TOMCAT_SVC}
 
-                            # Wait until ROOT is unpacked
-                            TIMEOUT=60
-                            while [ ! -d "${TOMCAT_PATH}/ROOT" ] && [ \$TIMEOUT -gt 0 ]; do
+                            # Wait for deployment to finish (with timeout)
+                            echo "Waiting for ROOT.war to be deployed..."
+                            TIMEOUT=${DEPLOY_TIMEOUT}
+                            while [ \$TIMEOUT -gt 0 ]; do
+                                if sudo grep -q "Deployment of web application archive ${TOMCAT_PATH}/ROOT.war has finished" /opt/tomcat/logs/catalina.out; then
+                                    echo "Deployment finished."
+                                    exit 0
+                                fi
                                 sleep 5
                                 TIMEOUT=\$((TIMEOUT-5))
                             done
 
-                            if [ ! -d "${TOMCAT_PATH}/ROOT" ]; then
-                                echo "ERROR: ROOT app did not unpack correctly!"
-                                exit 1
-                            fi
-EOF
+                            echo "ERROR: Deployment timed out after ${DEPLOY_TIMEOUT} seconds"
+                            exit 1
+                        '
                     """
                 }
             }
@@ -58,20 +64,24 @@ EOF
 
         stage('Verify via Proxy') {
             steps {
-                script {
-                    def response = sh(script: "curl -s -o /dev/null -w \"%{http_code}\" http://${PROXY_SERVER}/", returnStdout: true).trim()
-                    if (response != '200') {
-                        error "App not reachable via proxy! HTTP code: ${response}"
-                    } else {
-                        echo "✅ App reachable via proxy!"
-                    }
-                }
+                sh """
+                    HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://${PROXY_SERVER}/)
+                    echo "HTTP code from proxy: \$HTTP_CODE"
+                    if [ "\$HTTP_CODE" -ne 200 ]; then
+                        echo "ERROR: App not reachable via proxy!"
+                        exit 1
+                    fi
+                """
             }
         }
     }
 
     post {
-        success { echo "✅ Deployment successful! Access the app via: http://${PROXY_SERVER}/" }
-        failure { echo "❌ Deployment failed. Check Jenkins logs." }
+        success {
+            echo "✅ Deployment successful! Access the app via: http://${PROXY_SERVER}/"
+        }
+        failure {
+            echo "❌ Deployment failed. Check Jenkins logs."
+        }
     }
 }
