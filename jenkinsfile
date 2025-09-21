@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        SERVER_IP    = '<APP_SERVER_PRIVATE_IP>'  // Your app-server private IP
+        SERVER_IP    = '10.0.11.178'  // Your app-server private IP
         SSH_CRED_ID  = 'Devops_MJ_cred'           // Jenkins SSH credential ID
         TOMCAT_PATH  = '/opt/tomcat/webapps'
         TOMCAT_SVC   = 'tomcat10'
