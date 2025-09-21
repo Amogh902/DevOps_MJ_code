@@ -16,7 +16,10 @@
     try {
         Class.forName("com.mysql.cj.jdbc.Driver");
         Connection conn = DriverManager.getConnection(
-            "jdbc:mysql://localhost:3306/student_info", "root", "root");
+            "jdbc:mysql://mydb.csj0yw6ui35x.us-east-1.rds.amazonaws.com:3306/student_info?useSSL=false&allowPublicKeyRetrieval=true", 
+            "admn", 
+            "admin12345"
+        );
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery("SELECT * FROM student");
 
@@ -41,4 +44,3 @@
 <a href="index.jsp">Add New Student</a>
 </body>
 </html>
-
