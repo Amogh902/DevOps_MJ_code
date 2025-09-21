@@ -7,7 +7,8 @@ pipeline {
         TOMCAT_SVC    = 'tomcat10'
         GIT_REPO      = 'https://github.com/Amogh902/DevOps_MJ_code.git'
         GIT_BRANCH    = 'main'
-        APP_SERVER_IP = '10.0.11.178'
+        APP_SERVER_IP = '10.0.11.178'   
+        PROXY_SERVER_IP = '10.0.40.132' 
     }
 
     stages {
@@ -29,22 +30,22 @@ pipeline {
             steps {
                 sshagent([SSH_CRED_ID]) {
                     sh """
-                        # Find the first WAR file in target/
+                        # Get the WAR file
                         WAR_FILE=\$(ls target/*.war | head -n1)
                         echo "WAR built: \$WAR_FILE"
 
                         # Copy WAR to app-server as ROOT.war
                         scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${APP_SERVER_IP}:/tmp/ROOT.war
 
-                        # Deploy WAR on app-server
+                        # Deploy on app-server
                         ssh -o StrictHostKeyChecking=no ec2-user@${APP_SERVER_IP} '
                             set -e
-
                             echo "Stopping Tomcat..."
                             sudo systemctl stop ${TOMCAT_SVC} || true
 
                             echo "Cleaning old deployment..."
-                            sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war
+                            sudo rm -rf ${TOMCAT_PATH}/ROOT
+                            sudo rm -f ${TOMCAT_PATH}/ROOT.war
 
                             echo "Deploying new ROOT.war..."
                             sudo mv /tmp/ROOT.war ${TOMCAT_PATH}/ROOT.war
@@ -59,11 +60,25 @@ pipeline {
                 }
             }
         }
+
+        stage('Verify Deployment') {
+            steps {
+                echo "Testing application via proxy server..."
+                sh """
+                    HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://${PROXY_SERVER_IP}/)
+                    echo "HTTP status code from proxy: \$HTTP_CODE"
+                    if [ "\$HTTP_CODE" -ne 200 ]; then
+                        echo "ERROR: App not reachable!"
+                        exit 1
+                    fi
+                """
+            }
+        }
     }
 
     post {
         success {
-            echo "✅ App deployed successfully! Access via Proxy: http://<proxy-public-ip>/"
+            echo "✅ App deployed successfully! Access via Proxy: http://${PROXY_SERVER_IP}/"
         }
         failure {
             echo "❌ Deployment failed. Check Jenkins console logs."
