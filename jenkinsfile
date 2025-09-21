@@ -2,11 +2,11 @@ pipeline {
     agent any
 
     environment {
-        APP_SERVER_IP = '10.0.11.178'
-        SSH_CRED_ID   = 'Devops_MJ_cred'
-        TOMCAT_PATH   = '/opt/tomcat/webapps'
-        TOMCAT_SVC    = 'tomcat10'
-        PROXY_URL     = 'http://10.0.40.132/'
+        TOMCAT_SERVER = '10.0.11.178'           // Tomcat server private IP
+        PROXY_SERVER  = '10.0.40.132'           // Proxy server IP
+        SSH_CRED_ID   = 'ec2-user'              // Jenkins SSH credentials ID
+        TOMCAT_PATH   = '/opt/tomcat/webapps'   // Tomcat webapps directory
+        TOMCAT_SVC    = 'tomcat10'              // Tomcat service name
     }
 
     stages {
@@ -22,28 +22,37 @@ pipeline {
             }
         }
 
-        stage('Deploy WAR') {
+        stage('Deploy to Tomcat') {
             steps {
                 sshagent([SSH_CRED_ID]) {
                     sh """
                         WAR_FILE=\$(ls target/*.war | head -n1)
                         echo "WAR built: \$WAR_FILE"
 
-                        # Copy WAR to app-server
-                        scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${APP_SERVER_IP}:/tmp/ROOT.war
+                        # Copy WAR to Tomcat server
+                        scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${TOMCAT_SERVER}:/tmp/ROOT.war
 
-                        # Deploy on app-server
-                        ssh -o StrictHostKeyChecking=no ec2-user@${APP_SERVER_IP} '
+                        # Deploy WAR on Tomcat
+                        ssh -o StrictHostKeyChecking=no ec2-user@${TOMCAT_SERVER} '
                             sudo systemctl stop ${TOMCAT_SVC} || true
-                            sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war
+                            sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war ${TOMCAT_PATH}/student
                             sudo mv /tmp/ROOT.war ${TOMCAT_PATH}/ROOT.war
                             sudo chown -R tomcat:tomcat ${TOMCAT_PATH}
                             sudo chmod -R 755 ${TOMCAT_PATH}
                             sudo systemctl start ${TOMCAT_SVC}
-                        '
 
-                        echo "Waiting 30 seconds for Tomcat to unpack ROOT.war..."
-                        sleep 30
+                            # Wait until Tomcat unpacks ROOT.war
+                            TIMEOUT=30
+                            while [ ! -d "${TOMCAT_PATH}/ROOT" ] && [ \$TIMEOUT -gt 0 ]; do
+                                sleep 2
+                                TIMEOUT=\$((TIMEOUT-2))
+                            done
+
+                            if [ ! -d "${TOMCAT_PATH}/ROOT" ]; then
+                                echo "ERROR: ROOT app did not unpack correctly!"
+                                exit 1
+                            fi
+                        '
                     """
                 }
             }
@@ -51,24 +60,24 @@ pipeline {
 
         stage('Verify Deployment via Proxy') {
             steps {
-                sh '''
-                    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" ${PROXY_URL})
-                    if [ "$HTTP_CODE" -ne 200 ]; then
-                        echo "ERROR: App not reachable via proxy, HTTP code $HTTP_CODE"
+                sh """
+                    HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://${PROXY_SERVER}/)
+                    echo "HTTP code from proxy: \$HTTP_CODE"
+                    if [ "\$HTTP_CODE" -ne 200 ]; then
+                        echo "ERROR: App not reachable via proxy!"
                         exit 1
                     fi
-                    echo "App deployed successfully via proxy!"
-                '''
+                """
             }
         }
     }
 
     post {
         success {
-            echo "✅ Deployment completed!"
+            echo "✅ Deployment successful! Access the app via: http://${PROXY_SERVER}/"
         }
         failure {
-            echo "❌ Deployment failed!"
+            echo "❌ Deployment failed. Check Jenkins console logs."
         }
     }
 }
