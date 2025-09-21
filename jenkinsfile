@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        SERVER_IP    = '10.0.11.178'          // Your app-server private IP
-        SSH_CRED_ID  = 'Devops_MJ_cred'       // Jenkins SSH credential ID
+        APP_SERVER_IP = '10.0.11.178'       // Private IP of app-server
+        SSH_CRED_ID  = 'Devops_MJ_cred'     // Jenkins SSH credential ID
         TOMCAT_PATH  = '/opt/tomcat/webapps'
         TOMCAT_SVC   = 'tomcat10'
     }
@@ -21,24 +21,23 @@ pipeline {
             }
         }
 
-        stage('Deploy to Tomcat') {
+        stage('Deploy WAR to App Server') {
             steps {
                 sshagent([SSH_CRED_ID]) {
                     sh """
-                        WAR_FILE=\$(ls target/*.war | head -n 1)
-                        echo "Deploying \$WAR_FILE to ${SERVER_IP}"
+                        WAR_FILE=\$(ls target/*.war | head -n1)
+                        echo "Deploying \$WAR_FILE to ${APP_SERVER_IP}"
 
-                        # Copy WAR to app-server
-                        scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${SERVER_IP}:/tmp/
+                        # Copy WAR to app-server /tmp
+                        scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${APP_SERVER_IP}:/tmp/
 
-                        # Remove old deployment and deploy new WAR
-                        ssh -o StrictHostKeyChecking=no ec2-user@${SERVER_IP} '
-                            sudo systemctl stop ${TOMCAT_SVC}
-                            sudo mkdir -p ${TOMCAT_PATH}
-                            sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war
-                            sudo mv /tmp/*.war ${TOMCAT_PATH}/ROOT.war
-                            sudo chown -R tomcat:tomcat ${TOMCAT_PATH}
-                            sudo systemctl start ${TOMCAT_SVC}
+                        # Connect and deploy
+                        ssh -o StrictHostKeyChecking=no ec2-user@${APP_SERVER_IP} '
+                            sudo mkdir -p ${TOMCAT_PATH} &&
+                            sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war &&
+                            sudo mv /tmp/*.war ${TOMCAT_PATH}/ROOT.war &&
+                            sudo chown -R tomcat:tomcat ${TOMCAT_PATH} &&
+                            sudo systemctl restart ${TOMCAT_SVC}
                         '
                     """
                 }
@@ -48,10 +47,10 @@ pipeline {
 
     post {
         success {
-            echo "App deployed successfully! Visit via Proxy."
+            echo "App deployed successfully! Access via Proxy: http://<PROXY_PUBLIC_IP>/"
         }
         failure {
-            echo "Deployment failed. Check the console output for errors."
+            echo "Deployment failed. Check console logs."
         }
     }
 }
