@@ -42,9 +42,9 @@ pipeline {
                             sudo systemctl start ${TOMCAT_SVC}
 
                             # Wait until Tomcat unpacks ROOT.war
-                            TIMEOUT=30
+                            TIMEOUT=60
                             while [ ! -d "${TOMCAT_PATH}/ROOT" ] && [ \$TIMEOUT -gt 0 ]; do
-                                sleep 2
+                                sleep 5
                                 TIMEOUT=\$((TIMEOUT-2))
                             done
 
