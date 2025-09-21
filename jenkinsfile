@@ -1,0 +1,50 @@
+pipeline {
+    agent any
+
+    environment {
+        SERVER_IP    = '10.0.11.178'      // Replace with your EC2 app-server public IP
+        SSH_CRED_ID  = 'Devops_MJ_cred'              // Jenkins SSH credential ID
+        TOMCAT_PATH  = '/opt/tomcat/webapps'         // Adjust if Tomcat installed elsewhere
+        TOMCAT_SVC   = 'tomcat'                      // Service name (Amazon Linux may use 'tomcat')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/Amogh902/DevOps_MJ_code.git'
+            }
+        }
+
+        stage('Build WAR') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+
+        stage('Deploy to Tomcat') {
+            steps {
+                sshagent([SSH_CRED_ID]) {
+                    sh """
+                        WAR_FILE=\$(ls target/*.war | head -n 1)
+                        scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${SERVER_IP}:/tmp/
+                        ssh -o StrictHostKeyChecking=no ec2-user@${SERVER_IP} '
+                            sudo rm -rf ${TOMCAT_PATH}/*
+                            sudo mv /tmp/*.war ${TOMCAT_PATH}/ROOT.war
+                            sudo chown tomcat:tomcat ${TOMCAT_PATH}/ROOT.war
+                            sudo systemctl restart ${TOMCAT_SVC}
+                        '
+                    """
+                }
+            }
+        }
+    }
+
+post {
+    success {
+        echo "App deployed! Visit via Proxy: http://<PROXY_PUBLIC_IP>/"
+    }
+    failure {
+        echo "Deployment failed."
+    }
+}
+

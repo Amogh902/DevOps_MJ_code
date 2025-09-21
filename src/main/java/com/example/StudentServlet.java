@@ -7,9 +7,9 @@ import java.sql.*;
 
 public class StudentServlet extends HttpServlet {
     // Update these with your RDS details
-    private static final String JDBC_URL = "jdbc:mysql://<RDS-ENDPOINT>:3306/student_info?useSSL=false&allowPublicKeyRetrieval=true";
+    private static final String JDBC_URL = "jdbc:mysql://mydb.csj0yw6ui35x.us-east-1.rds.amazonaws.com:3306/student_info?useSSL=false&allowPublicKeyRetrieval=true";
     private static final String JDBC_USER = "admin";        // RDS username
-    private static final String JDBC_PASSWORD = "admin"; // RDS password
+    private static final String JDBC_PASSWORD = "admin12345"; // RDS password
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
