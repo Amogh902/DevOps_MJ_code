@@ -17,7 +17,7 @@
         Class.forName("com.mysql.cj.jdbc.Driver");
         Connection conn = DriverManager.getConnection(
             "jdbc:mysql://mydb.csj0yw6ui35x.us-east-1.rds.amazonaws.com:3306/student_info?useSSL=false&allowPublicKeyRetrieval=true", 
-            "admn", 
+            "admin", 
             "admin12345"
         );
         Statement stmt = conn.createStatement();
