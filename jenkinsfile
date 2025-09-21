@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        SERVER_IP    = '10.0.11.178'  // Your app-server private IP
-        SSH_CRED_ID  = 'Devops_MJ_cred'           // Jenkins SSH credential ID
+        SERVER_IP    = '10.0.11.178'          // Your app-server private IP
+        SSH_CRED_ID  = 'Devops_MJ_cred'       // Jenkins SSH credential ID
         TOMCAT_PATH  = '/opt/tomcat/webapps'
         TOMCAT_SVC   = 'tomcat10'
     }
@@ -27,13 +27,18 @@ pipeline {
                     sh """
                         WAR_FILE=\$(ls target/*.war | head -n 1)
                         echo "Deploying \$WAR_FILE to ${SERVER_IP}"
+
+                        # Copy WAR to app-server
                         scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${SERVER_IP}:/tmp/
+
+                        # Remove old deployment and deploy new WAR
                         ssh -o StrictHostKeyChecking=no ec2-user@${SERVER_IP} '
+                            sudo systemctl stop ${TOMCAT_SVC}
                             sudo mkdir -p ${TOMCAT_PATH}
-                            sudo rm -rf ${TOMCAT_PATH}/*
+                            sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war
                             sudo mv /tmp/*.war ${TOMCAT_PATH}/ROOT.war
                             sudo chown -R tomcat:tomcat ${TOMCAT_PATH}
-                            sudo systemctl restart ${TOMCAT_SVC}
+                            sudo systemctl start ${TOMCAT_SVC}
                         '
                     """
                 }
