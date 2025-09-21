@@ -1,13 +1,13 @@
 #  DevOps-MJ Project
 
-*End-to-End CI/CD Pipeline with AWS, Terraform, Ansible, Jenkins & Tomcat*
+*End-to-End CI/CD Pipeline with AWS, Terraform, Ansible, Jenkins, Tomcat and Route53*
 
 ![AWS](https://img.shields.io/badge/AWS-Cloud-orange?logo=amazonaws)
 ![Terraform](https://img.shields.io/badge/Terraform-IaC-purple?logo=terraform)
 ![Ansible](https://img.shields.io/badge/Ansible-Automation-red?logo=ansible)
 ![Jenkins](https://img.shields.io/badge/Jenkins-CI%2FCD-blue?logo=jenkins)
 ![Tomcat](https://img.shields.io/badge/Tomcat-App%20Server-yellow?logo=apachetomcat)
-![Status](https://img.shields.io/badge/Status-Completed-brightgreen)
+
 
 ---
 
@@ -22,6 +22,7 @@ This project demonstrates a **fully automated DevOps pipeline** that provisions 
 3. **Jenkins** builds & deploys WAR file to Tomcat
 4. **Nginx** reverse proxy serves app publicly
 5. **GitHub Webhooks** trigger Jenkins builds automatically on new commits
+6. **Route 53** maps custom domain → Proxy server public IP
 
 ---
 
@@ -35,6 +36,7 @@ This project demonstrates a **fully automated DevOps pipeline** that provisions 
 * **Private Subnet** → Tomcat App Server
 * **Database** → RDS MySQL (private subnet only)
 * **Proxy Layer** → Nginx forwards HTTP → Tomcat
+* **DNS Layer** → Route 53 maps amoghtech.cloud to Proxy public IP
 
 ![](/DevOps_MJ_img/VPC-detail-resources.png)
 
@@ -67,7 +69,7 @@ Provisioned Resources
 
   * RDS MySQL (username: `admin`, password: `admin12345`)
 
-📸 *Terraform Outputs:*
+
 ![](/DevOps_MJ_img/Terraform-output.png)
 
 
@@ -89,7 +91,7 @@ Playbooks
   * Configures MySQL connector
   * Manages Tomcat service
 
-📸 *Ansible Run Example:*
+
 ![](/DevOps_MJ_img/Ansible-output.png)
 
 
@@ -152,11 +154,12 @@ server {
 ```
 
 *App Homepage:*
-![](/DevOps_MJ_img/output-1.png)
 
-![](/DevOps_MJ_img/output-2.png)
+![](/DevOps_MJ_img/domain_name1.png)
 
-![](/DevOps_MJ_img/output-3.png)
+![](/DevOps_MJ_img/domain_name2.png)
+
+![](/DevOps_MJ_img/new-db-output3.png)
 
 ---
 
@@ -199,6 +202,7 @@ This project showcases **end-to-end DevOps automation** with:
 *  **AWS Security** → Private app, public proxy
 *  **Nginx** → Public access via reverse proxy
 *  **Webhooks** → Automatic builds on GitHub push
+* **Route 53** → Custom domain mapping (amoghtech.cloud)
 
 A complete **DevOps blueprint** for deploying Java applications in the cloud.
 
@@ -211,7 +215,8 @@ A complete **DevOps blueprint** for deploying Java applications in the cloud.
 3. Run Ansible → `ansible-playbook site.yml`
 4. Configure Jenkins pipeline → use provided `Jenkinsfile`
 5. Enable GitHub Webhooks → auto-trigger deployments
-6. Access app via → `http://<proxy-server-public-ip>/`
+6. Configure Route 53 → map amoghtech.cloud to Proxy server public IP
+7. Access app via → http://amoghtech.cloud/
 
 ---
 
