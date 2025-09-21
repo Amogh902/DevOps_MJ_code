@@ -2,21 +2,25 @@ pipeline {
     agent any
 
     environment {
-        APP_SERVER_IP = '10.0.11.178'
         SSH_CRED_ID   = 'Devops_MJ_cred'
         TOMCAT_PATH   = '/opt/tomcat/webapps'
         TOMCAT_SVC    = 'tomcat10'
+        GIT_REPO      = 'https://github.com/Amogh902/DevOps_MJ_code.git'
+        GIT_BRANCH    = 'main'
+        APP_SERVER_IP = '10.0.11.178'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/Amogh902/DevOps_MJ_code.git'
+                echo "Cloning Git repository..."
+                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
             }
         }
 
         stage('Build WAR') {
             steps {
+                echo "Building WAR with Maven..."
                 sh 'mvn clean package'
             }
         }
@@ -25,19 +29,31 @@ pipeline {
             steps {
                 sshagent([SSH_CRED_ID]) {
                     sh """
+                        # Find the first WAR file in target/
                         WAR_FILE=\$(ls target/*.war | head -n1)
                         echo "WAR built: \$WAR_FILE"
 
-                        # Copy WAR to app-server
-                        scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${APP_SERVER_IP}:/tmp/
+                        # Copy WAR to app-server as ROOT.war
+                        scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${APP_SERVER_IP}:/tmp/ROOT.war
 
-                        # Deploy on app-server
+                        # Deploy WAR on app-server
                         ssh -o StrictHostKeyChecking=no ec2-user@${APP_SERVER_IP} '
+                            set -e
+
+                            echo "Stopping Tomcat..."
                             sudo systemctl stop ${TOMCAT_SVC} || true
+
+                            echo "Cleaning old deployment..."
                             sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war
-                            sudo mv /tmp/*.war ${TOMCAT_PATH}/ROOT.war
+
+                            echo "Deploying new ROOT.war..."
+                            sudo mv /tmp/ROOT.war ${TOMCAT_PATH}/ROOT.war
                             sudo chown -R tomcat:tomcat ${TOMCAT_PATH}
+
+                            echo "Starting Tomcat..."
                             sudo systemctl start ${TOMCAT_SVC}
+
+                            echo "Deployment finished."
                         '
                     """
                 }
@@ -47,10 +63,10 @@ pipeline {
 
     post {
         success {
-            echo "App deployed successfully! Access via Proxy: http://10.0.40.132/"
+            echo "✅ App deployed successfully! Access via Proxy: http://<proxy-public-ip>/"
         }
         failure {
-            echo "Deployment failed. Check console logs."
+            echo "❌ Deployment failed. Check Jenkins console logs."
         }
     }
 }
