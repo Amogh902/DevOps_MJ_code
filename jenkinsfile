@@ -4,7 +4,7 @@ pipeline {
     environment {
         TOMCAT_SERVER = '10.0.11.178'           // Tomcat server private IP
         PROXY_SERVER  = '10.0.40.132'           // Proxy server IP
-        SSH_CRED_ID   = 'Devops_MJ_cred'              // Jenkins SSH credentials ID
+        SSH_CRED_ID   = 'Devops_MJ_cred'        // Jenkins SSH credentials ID
         TOMCAT_PATH   = '/opt/tomcat/webapps'   // Tomcat webapps directory
         TOMCAT_SVC    = 'tomcat10'              // Tomcat service name
     }
@@ -18,7 +18,13 @@ pipeline {
 
         stage('Build WAR') {
             steps {
-                sh 'mvn clean package'
+                sh '''
+                    mvn clean package
+                    WAR_FILE=$(ls target/*.war | head -n1)
+                    echo "WAR built: $WAR_FILE"
+                    echo "WAR contents:"
+                    jar tf $WAR_FILE | head -n 20
+                '''
             }
         }
 
@@ -27,31 +33,36 @@ pipeline {
                 sshagent([SSH_CRED_ID]) {
                     sh """
                         WAR_FILE=\$(ls target/*.war | head -n1)
-                        echo "WAR built: \$WAR_FILE"
+                        echo "Deploying WAR: \$WAR_FILE"
 
                         # Copy WAR to Tomcat server
                         scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${TOMCAT_SERVER}:/tmp/ROOT.war
 
-                        # Deploy WAR on Tomcat
+                        # Deploy WAR
                         ssh -o StrictHostKeyChecking=no ec2-user@${TOMCAT_SERVER} '
                             sudo systemctl stop ${TOMCAT_SVC} || true
-                            sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war ${TOMCAT_PATH}/student
+                            sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war
                             sudo mv /tmp/ROOT.war ${TOMCAT_PATH}/ROOT.war
                             sudo chown -R tomcat:tomcat ${TOMCAT_PATH}
                             sudo chmod -R 755 ${TOMCAT_PATH}
                             sudo systemctl start ${TOMCAT_SVC}
 
-                            # Wait until Tomcat unpacks ROOT.war
-                            TIMEOUT=60
-                            while [ ! -d "${TOMCAT_PATH}/ROOT" ] && [ \$TIMEOUT -gt 0 ]; do
+                            # Wait for Tomcat to unpack WAR
+                            echo "Waiting for ROOT app to unpack..."
+                            TIMEOUT=120
+                            while [ ! -d "${TOMCAT_PATH}/ROOT" ] && [ $TIMEOUT -gt 0 ]; do
                                 sleep 5
-                                TIMEOUT=\$((TIMEOUT-2))
+                                TIMEOUT=$((TIMEOUT-5))
                             done
 
                             if [ ! -d "${TOMCAT_PATH}/ROOT" ]; then
                                 echo "ERROR: ROOT app did not unpack correctly!"
+                                sudo tail -n 50 /opt/tomcat/logs/catalina.out
                                 exit 1
                             fi
+
+                            # Extra wait to ensure full app startup
+                            sleep 10
                         '
                     """
                 }
@@ -61,6 +72,7 @@ pipeline {
         stage('Verify Deployment via Proxy') {
             steps {
                 sh """
+                    echo "Checking app via proxy..."
                     HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://${PROXY_SERVER}/)
                     echo "HTTP code from proxy: \$HTTP_CODE"
                     if [ "\$HTTP_CODE" -ne 200 ]; then
@@ -77,7 +89,7 @@ pipeline {
             echo "✅ Deployment successful! Access the app via: http://${PROXY_SERVER}/"
         }
         failure {
-            echo "❌ Deployment failed. Check Jenkins console logs."
+            echo "❌ Deployment failed. Check Jenkins console logs for details."
         }
     }
 }
