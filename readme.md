@@ -21,6 +21,7 @@ This project demonstrates a **fully automated DevOps pipeline** that provisions 
 2. **Ansible** configures servers (Nginx, Tomcat, MySQL connector)
 3. **Jenkins** builds & deploys WAR file to Tomcat
 4. **Nginx** reverse proxy serves app publicly
+5. **GitHub Webhooks** trigger Jenkins builds automatically on new commits
 
 ---
 
@@ -159,6 +160,35 @@ server {
 
 ---
 
+## Automating Builds with GitHub Webhooks
+
+To trigger the Jenkins build automatically on code push, ensure the **GitHub Plugin** is installed on Jenkins.
+
+**Step 1 — Enable GitHub Hook Trigger in Jenkins**
+
+* Open your Jenkins job → Configure
+* Under **Build Triggers**, check:
+
+  * `GitHub hook trigger for GITScm polling`
+
+![](/DevOps_MJ_img/webhook-2.png)
+
+
+**Step 2 — Add Webhook in GitHub**
+
+* Go to your repository → **Settings** → **Webhooks** → **Add webhook**
+* Payload URL:
+
+```
+http://<JENKINS_SERVER_IP>:8080/github-webhook/
+```
+
+![](/DevOps_MJ_img/webhook-1.png)
+
+Now, whenever you push code to the repo, Jenkins will automatically pull changes and deploy them.
+
+---
+
 ##  Conclusion
 
 This project showcases **end-to-end DevOps automation** with:
@@ -168,6 +198,7 @@ This project showcases **end-to-end DevOps automation** with:
 *  **Jenkins** → Continuous delivery pipeline
 *  **AWS Security** → Private app, public proxy
 *  **Nginx** → Public access via reverse proxy
+*  **Webhooks** → Automatic builds on GitHub push
 
 A complete **DevOps blueprint** for deploying Java applications in the cloud.
 
@@ -179,7 +210,8 @@ A complete **DevOps blueprint** for deploying Java applications in the cloud.
 2. Run Terraform → `terraform apply`
 3. Run Ansible → `ansible-playbook site.yml`
 4. Configure Jenkins pipeline → use provided `Jenkinsfile`
-5. Access app via → `http://<proxy-server-public-ip>/`
+5. Enable GitHub Webhooks → auto-trigger deployments
+6. Access app via → `http://<proxy-server-public-ip>/`
 
 ---
 
