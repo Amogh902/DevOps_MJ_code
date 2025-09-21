@@ -2,10 +2,10 @@ pipeline {
     agent any
 
     environment {
-        SERVER_IP    = '10.0.11.178'
-        SSH_CRED_ID  = 'Devops_MJ_cred'
+        SERVER_IP    = '<APP_SERVER_PRIVATE_IP>'  // Your app-server private IP
+        SSH_CRED_ID  = 'Devops_MJ_cred'           // Jenkins SSH credential ID
         TOMCAT_PATH  = '/opt/tomcat/webapps'
-        TOMCAT_SVC   = 'tomcat'
+        TOMCAT_SVC   = 'tomcat10'
     }
 
     stages {
@@ -26,25 +26,27 @@ pipeline {
                 sshagent([SSH_CRED_ID]) {
                     sh """
                         WAR_FILE=\$(ls target/*.war | head -n 1)
+                        echo "Deploying \$WAR_FILE to ${SERVER_IP}"
                         scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${SERVER_IP}:/tmp/
                         ssh -o StrictHostKeyChecking=no ec2-user@${SERVER_IP} '
+                            sudo mkdir -p ${TOMCAT_PATH}
                             sudo rm -rf ${TOMCAT_PATH}/*
                             sudo mv /tmp/*.war ${TOMCAT_PATH}/ROOT.war
-                            sudo chown tomcat:tomcat ${TOMCAT_PATH}/ROOT.war
+                            sudo chown -R tomcat:tomcat ${TOMCAT_PATH}
                             sudo systemctl restart ${TOMCAT_SVC}
                         '
                     """
                 }
             }
         }
-    } // <-- closes stages
+    }
 
-    post {  // <-- must be inside pipeline block
+    post {
         success {
-            echo "App deployed! Visit via Proxy: http://<PROXY_PUBLIC_IP>/"
+            echo "App deployed successfully! Visit via Proxy."
         }
         failure {
-            echo "Deployment failed."
+            echo "Deployment failed. Check the console output for errors."
         }
     }
-} // <-- closes pipeline
+}
