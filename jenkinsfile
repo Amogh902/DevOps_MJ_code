@@ -2,10 +2,10 @@ pipeline {
     agent any
 
     environment {
-        SERVER_IP    = '10.0.11.178'      // Replace with your EC2 app-server public IP
-        SSH_CRED_ID  = 'Devops_MJ_cred'   // Jenkins SSH credential ID
-        TOMCAT_PATH  = '/opt/tomcat/webapps' // Adjust if Tomcat installed elsewhere
-        TOMCAT_SVC   = 'tomcat'           // Service name (Amazon Linux may use 'tomcat')
+        SERVER_IP    = '10.0.11.178'
+        SSH_CRED_ID  = 'Devops_MJ_cred'
+        TOMCAT_PATH  = '/opt/tomcat/webapps'
+        TOMCAT_SVC   = 'tomcat'
     }
 
     stages {
@@ -37,9 +37,9 @@ pipeline {
                 }
             }
         }
-    }
+    } // <-- closes stages
 
-    post {  // <-- moved inside pipeline block
+    post {  // <-- must be inside pipeline block
         success {
             echo "App deployed! Visit via Proxy: http://<PROXY_PUBLIC_IP>/"
         }
@@ -47,4 +47,4 @@ pipeline {
             echo "Deployment failed."
         }
     }
-}
+} // <-- closes pipeline
