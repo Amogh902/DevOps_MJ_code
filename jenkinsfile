@@ -6,7 +6,7 @@ pipeline {
         REMOTE_USER = "ec2-user"
         REMOTE_HOST = "10.0.11.178"
         TOMCAT_PATH = "/opt/tomcat/webapps"
-        SSH_CREDENTIALS = "Credentials_for_ssh_app_server"
+        SSH_CREDENTIALS = "Devops_MJ_cred"
         APP_URL = "http://${REMOTE_HOST}:8080/"
     }
 
