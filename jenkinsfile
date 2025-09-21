@@ -2,19 +2,17 @@ pipeline {
     agent any
 
     environment {
-        SSH_CRED_ID     = 'Devops_MJ_cred'
-        TOMCAT_PATH     = '/opt/tomcat/webapps'
-        TOMCAT_SVC      = 'tomcat10'
-        GIT_REPO        = 'https://github.com/Amogh902/DevOps_MJ_code.git'
-        GIT_BRANCH      = 'main'
-        APP_SERVER_IP   = '10.0.11.178'   // App server private IP
-        PROXY_SERVER_IP = '10.0.40.132'   // Proxy public IP
+        APP_SERVER_IP = '10.0.11.178'
+        SSH_CRED_ID   = 'Devops_MJ_cred'
+        TOMCAT_PATH   = '/opt/tomcat/webapps'
+        TOMCAT_SVC    = 'tomcat10'
+        PROXY_URL     = 'http://10.0.40.132/'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
+                git branch: 'main', url: 'https://github.com/Amogh902/DevOps_MJ_code.git'
             }
         }
 
@@ -28,72 +26,49 @@ pipeline {
             steps {
                 sshagent([SSH_CRED_ID]) {
                     sh """
-                        # Find WAR file
                         WAR_FILE=\$(ls target/*.war | head -n1)
                         echo "WAR built: \$WAR_FILE"
 
-                        # Copy WAR to app server as ROOT.war
+                        # Copy WAR to app-server
                         scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${APP_SERVER_IP}:/tmp/ROOT.war
 
-                        # Deploy on app server
+                        # Deploy on app-server
                         ssh -o StrictHostKeyChecking=no ec2-user@${APP_SERVER_IP} '
-                            set -e
-                            echo "Stopping Tomcat..."
                             sudo systemctl stop ${TOMCAT_SVC} || true
-
-                            echo "Cleaning old deployment..."
-                            sudo rm -rf ${TOMCAT_PATH}/ROOT
-                            sudo rm -f ${TOMCAT_PATH}/ROOT.war
-
-                            echo "Deploying new ROOT.war..."
+                            sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war
                             sudo mv /tmp/ROOT.war ${TOMCAT_PATH}/ROOT.war
                             sudo chown -R tomcat:tomcat ${TOMCAT_PATH}
                             sudo chmod -R 755 ${TOMCAT_PATH}
-
-                            echo "Starting Tomcat..."
                             sudo systemctl start ${TOMCAT_SVC}
-
-                            # Wait for Tomcat to unpack ROOT.war
-                            echo "Waiting for ROOT app to deploy..."
-                            TIMEOUT=30
-                            while [ ! -d "${TOMCAT_PATH}/ROOT" ] && [ \$TIMEOUT -gt 0 ]; do
-                                sleep 2
-                                TIMEOUT=\$((TIMEOUT-2))
-                            done
-
-                            if [ ! -d "${TOMCAT_PATH}/ROOT" ]; then
-                                echo "ERROR: ROOT app did not unpack correctly!"
-                                exit 1
-                            fi
-
-                            echo "Deployment finished."
                         '
+
+                        echo "Waiting 30 seconds for Tomcat to unpack ROOT.war..."
+                        sleep 30
                     """
                 }
             }
         }
 
-        stage('Verify Deployment') {
+        stage('Verify Deployment via Proxy') {
             steps {
-                echo "Testing application via proxy server..."
-                sh """
-                    HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://${PROXY_SERVER_IP}/)
-                    echo "HTTP status code from proxy: \$HTTP_CODE"
-                    if [ "\$HTTP_CODE" -ne 200 ]; then
-                        echo "ERROR: App not reachable via proxy!"
+                sh '''
+                    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" ${PROXY_URL})
+                    if [ "$HTTP_CODE" -ne 200 ]; then
+                        echo "ERROR: App not reachable via proxy, HTTP code $HTTP_CODE"
                         exit 1
                     fi
-                """
+                    echo "App deployed successfully via proxy!"
+                '''
             }
         }
     }
 
     post {
         success {
-            echo "✅ App deployed successfully! Access via Proxy: http://${PROXY_SERVER_IP}/"
+            echo "✅ Deployment completed!"
         }
         failure {
-            echo "❌ Deployment failed. Check Jenkins console logs."
+            echo "❌ Deployment failed!"
         }
     }
 }
