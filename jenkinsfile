@@ -2,11 +2,11 @@ pipeline {
     agent any
 
     environment {
-        TOMCAT_SERVER = '10.0.11.178'           // Tomcat server private IP
-        PROXY_SERVER  = '10.0.40.132'           // Proxy server IP
-        SSH_CRED_ID   = 'Devops_MJ_cred'        // Jenkins SSH credentials ID
-        TOMCAT_PATH   = '/opt/tomcat/webapps'   // Tomcat webapps directory
-        TOMCAT_SVC    = 'tomcat10'              // Tomcat service name
+        TOMCAT_SERVER = '10.0.11.178'
+        PROXY_SERVER  = '10.0.40.132'
+        SSH_CRED_ID   = 'Devops_MJ_cred'
+        TOMCAT_PATH   = '/opt/tomcat/webapps'
+        TOMCAT_SVC    = 'tomcat10'
     }
 
     stages {
@@ -25,15 +25,13 @@ pipeline {
         stage('Deploy to Tomcat') {
             steps {
                 sshagent([SSH_CRED_ID]) {
-                    sh '''
-                        WAR_FILE=$(ls target/*.war | head -n1)
-                        echo "WAR built: $WAR_FILE"
+                    sh """
+                        WAR_FILE=\$(ls target/*.war | head -n1)
+                        echo "WAR built: \$WAR_FILE"
 
-                        # Copy WAR to Tomcat server
-                        scp -o StrictHostKeyChecking=no $WAR_FILE ec2-user@${TOMCAT_SERVER}:/tmp/ROOT.war
+                        scp -o StrictHostKeyChecking=no \$WAR_FILE ec2-user@${TOMCAT_SERVER}:/tmp/ROOT.war
 
-                        # Deploy WAR on Tomcat
-                        ssh -o StrictHostKeyChecking=no ec2-user@${TOMCAT_SERVER} '
+                        ssh -o StrictHostKeyChecking=no ec2-user@${TOMCAT_SERVER} << 'EOF'
                             sudo systemctl stop ${TOMCAT_SVC} || true
                             sudo rm -rf ${TOMCAT_PATH}/ROOT ${TOMCAT_PATH}/ROOT.war
                             sudo mv /tmp/ROOT.war ${TOMCAT_PATH}/ROOT.war
@@ -41,44 +39,39 @@ pipeline {
                             sudo chmod -R 755 ${TOMCAT_PATH}
                             sudo systemctl start ${TOMCAT_SVC}
 
-                            # Wait until Tomcat unpacks ROOT.war
-                            TIMEOUT=120
-                            while [ ! -d "${TOMCAT_PATH}/ROOT" ] && [ $TIMEOUT -gt 0 ]; do
+                            # Wait until ROOT is unpacked
+                            TIMEOUT=60
+                            while [ ! -d "${TOMCAT_PATH}/ROOT" ] && [ \$TIMEOUT -gt 0 ]; do
                                 sleep 5
-                                TIMEOUT=$((TIMEOUT-5))
+                                TIMEOUT=\$((TIMEOUT-5))
                             done
 
                             if [ ! -d "${TOMCAT_PATH}/ROOT" ]; then
                                 echo "ERROR: ROOT app did not unpack correctly!"
-                                sudo tail -n 50 /opt/tomcat/logs/catalina.out
                                 exit 1
                             fi
-                        '
-                    '''
+EOF
+                    """
                 }
             }
         }
 
-        stage('Verify Deployment via Proxy') {
+        stage('Verify via Proxy') {
             steps {
-                sh '''
-                    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://${PROXY_SERVER}/)
-                    echo "HTTP code from proxy: $HTTP_CODE"
-                    if [ "$HTTP_CODE" -ne 200 ]; then
-                        echo "ERROR: App not reachable via proxy!"
-                        exit 1
-                    fi
-                '''
+                script {
+                    def response = sh(script: "curl -s -o /dev/null -w \"%{http_code}\" http://${PROXY_SERVER}/", returnStdout: true).trim()
+                    if (response != '200') {
+                        error "App not reachable via proxy! HTTP code: ${response}"
+                    } else {
+                        echo "✅ App reachable via proxy!"
+                    }
+                }
             }
         }
     }
 
     post {
-        success {
-            echo "✅ Deployment successful! Access the app via: http://${PROXY_SERVER}/"
-        }
-        failure {
-            echo "❌ Deployment failed. Check Jenkins console logs."
-        }
+        success { echo "✅ Deployment successful! Access the app via: http://${PROXY_SERVER}/" }
+        failure { echo "❌ Deployment failed. Check Jenkins logs." }
     }
 }
