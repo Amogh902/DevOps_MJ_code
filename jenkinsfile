@@ -2,12 +2,10 @@ pipeline {
     agent any
 
     environment {
-        TOMCAT_SERVER = '10.0.11.178'
-        PROXY_SERVER  = '10.0.40.132'
-        SSH_CRED_ID   = 'Devops_MJ_cred'
-        TOMCAT_PATH   = '/opt/tomcat/webapps'
-        TOMCAT_SVC    = 'tomcat10'
-        DEPLOY_TIMEOUT = 120  // in seconds
+        TOMCAT_SERVER = '10.0.11.178'           // Tomcat server private IP
+        SSH_CRED_ID   = 'Devops_MJ_cred'        // Jenkins SSH credentials ID
+        TOMCAT_PATH   = '/opt/tomcat/webapps'   // Tomcat webapps directory
+        TOMCAT_SVC    = 'tomcat10'              // Tomcat service name
     }
 
     stages {
@@ -40,22 +38,21 @@ pipeline {
                             sudo mv /tmp/ROOT.war ${TOMCAT_PATH}/ROOT.war
                             sudo chown tomcat:tomcat ${TOMCAT_PATH}/ROOT.war
                             sudo chmod 644 ${TOMCAT_PATH}/ROOT.war
-                            sudo systemctl restart ${TOMCAT_SVC}
+                            sudo systemctl start ${TOMCAT_SVC}
 
-                            # Wait for deployment to finish (with timeout)
-                            echo "Waiting for ROOT.war to be deployed..."
-                            TIMEOUT=${DEPLOY_TIMEOUT}
-                            while [ \$TIMEOUT -gt 0 ]; do
-                                if sudo grep -q "Deployment of web application archive ${TOMCAT_PATH}/ROOT.war has finished" /opt/tomcat/logs/catalina.out; then
-                                    echo "Deployment finished."
-                                    exit 0
-                                fi
+                            # Wait until ROOT directory exists (deployment finished)
+                            TIMEOUT=120
+                            while [ ! -d "${TOMCAT_PATH}/ROOT" ] && [ \$TIMEOUT -gt 0 ]; do
                                 sleep 5
                                 TIMEOUT=\$((TIMEOUT-5))
                             done
 
-                            echo "ERROR: Deployment timed out after ${DEPLOY_TIMEOUT} seconds"
-                            exit 1
+                            if [ ! -d "${TOMCAT_PATH}/ROOT" ]; then
+                                echo "ERROR: ROOT app did not unpack correctly!"
+                                exit 1
+                            fi
+
+                            echo "Deployment finished successfully."
                         '
                     """
                 }
@@ -65,10 +62,10 @@ pipeline {
         stage('Verify via Proxy') {
             steps {
                 sh """
-                    HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://${PROXY_SERVER}/)
-                    echo "HTTP code from proxy: \$HTTP_CODE"
+                    HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://${TOMCAT_SERVER}/)
+                    echo "HTTP code from Tomcat: \$HTTP_CODE"
                     if [ "\$HTTP_CODE" -ne 200 ]; then
-                        echo "ERROR: App not reachable via proxy!"
+                        echo "ERROR: App not reachable!"
                         exit 1
                     fi
                 """
@@ -78,10 +75,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Deployment successful! Access the app via: http://${PROXY_SERVER}/"
+            echo "✅ Deployment successful! Access the app via: http://${TOMCAT_SERVER}/"
         }
         failure {
-            echo "❌ Deployment failed. Check Jenkins logs."
+            echo "❌ Deployment failed. Check Jenkins console logs."
         }
     }
 }
