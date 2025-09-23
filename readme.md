@@ -1,4 +1,4 @@
-#  DevOps-MJ Project
+#  CloudOps: End-to-End DevOps Automation
 
 *End-to-End CI/CD Pipeline with AWS, Terraform, Ansible, Jenkins, Tomcat and Route53*
 
