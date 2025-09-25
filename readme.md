@@ -28,7 +28,7 @@ This project demonstrates a **fully automated DevOps pipeline** that provisions 
 
 ## Architecture
 
-![Architecture Diagram](images/architecture.png)
+![](/DevOps_MJ_img/architecture.png)
 
  Architecture Details
 
